@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Railway AI Decision Support System</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .train-marker {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+        
+        .conflict-alert {
+            animation: blink 1s infinite;
+        }
+        
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.5; }
+        }
+        
+        .metric-card {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+        
+        .network-svg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 12px;
+        }
+        
+        .decision-card {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 8px 0;
+            animation: slideIn 0.5s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateX(-100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        .loading-spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div id="app" class="container mx-auto p-6 max-w-7xl">
+        <!-- Header -->
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-800 flex items-center">
+                        <i class="fas fa-train mr-3 text-blue-600"></i>
+                        Railway AI Decision Support System
+                    </h1>
+                    <p class="text-gray-600 mt-2">Intelligent train scheduling and conflict resolution for Indian Railways</p>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <div id="connectionStatus" class="flex items-center text-sm">
+                        <div class="loading-spinner mr-2"></div>
+                        Connecting...
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Control Panel -->
+            <div class="flex items-center gap-4 mt-6">
+                <button id="startBtn" class="flex items-center gap-2 px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium">
+                    <i class="fas fa-play"></i>
+                    Start Simulation
+                </button>
+                
+                <button id="stopBtn" class="flex items-center gap-2 px-6 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-medium" disabled>
+                    <i class="fas fa-pause"></i>
+                    Stop Simulation
+                </button>
+                
+                <button id="resetBtn" class="flex items-center gap-2 px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors font-medium">
+                    <i class="fas fa-redo"></i>
+                    Reset
+                </button>
+                
+                <button id="disruptionBtn" class="flex items-center gap-2 px-6 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    Add Disruption
+                </button>
+                
+                <div class="flex items-center gap-2 text-lg font-mono bg-blue-100 px-4 py-3 rounded-lg">
+                    <i class="fas fa-clock text-blue-600"></i>
+                    <span>Current Time: <span id="currentTime">08:00</span></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Metrics Dashboard -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+            <div class="metric-card bg-gradient-to-r from-green-400 to-green-600 p-6 rounded-lg text-white">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-green-100 text-sm font-medium">On-Time Performance</p>
+                        <p id="onTimeMetric" class="text-3xl font-bold">100%</p>
+                    </div>
+                    <i class="fas fa-chart-line text-3xl text-green-200"></i>
+                </div>
+            </div>
+            
+            <div class="metric-card bg-gradient-to-r from-blue-400 to-blue-600 p-6 rounded-lg text-white">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-blue-100 text-sm font-medium">Average Delay</p>
+                        <p id="avgDelayMetric" class="text-3xl font-bold">0 min</p>
+                    </div>
+                    <i class="fas fa-clock text-3xl text-blue-200"></i>
+                </div>
+            </div>
+            
+            <div class="metric-card bg-gradient-to-r from-purple-400 to-purple-600 p-6 rounded-lg text-white">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-purple-100 text-sm font-medium">Throughput</p>
+                        <p id="throughputMetric" class="text-3xl font-bold">0</p>
+                    </div>
+                    <i class="fas fa-train text-3xl text-purple-200"></i>
+                </div>
+            </div>
+            
+            <div class="metric-card bg-gradient-to-r from-orange-400 to-red-500 p-6 rounded-lg text-white">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-orange-100 text-sm font-medium">Active Conflicts</p>
+                        <p id="conflictsMetric" class="text-3xl font-bold">0</p>
+                    </div>
+                    <i class="fas fa-exclamation-triangle text-3xl text-orange-200"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Railway Network Visualization -->
+            <div class="lg:col-span-2 bg-white rounded-lg shadow-lg p-6">
+                <h3 class="text-xl font-semibold mb-4 flex items-center">
+                    <i class="fas fa-route mr-2 text-blue-600"></i>
+                    Railway Network Status
+                </h3>
+                <div class="network-svg p-4 rounded-lg">
+                    <svg id="networkSvg" width="100%" height="400" viewBox="0 0 600 400" class="rounded-lg">
+                        <!-- Network will be drawn here by JavaScript -->
+                    </svg>
+                </div>
+                
+                <!-- Train Legend -->
+                <div class="mt-4 flex flex-wrap gap-4">
+                    <div class="flex items-center">
+                        <div class="w-4 h-2 bg-red-500 rounded mr-2"></div>
+                        <span class="text-sm">Express</span>
+                    </div>
+                    <div class="flex items-center">
+                        <div class="w-4 h-2 bg-blue-500 rounded mr-2"></div>
+                        <span class="text-sm">Passenger</span>
+                    </div>
+                    <div class="flex items-center">
+                        <div class="w-4 h-2 bg-green-500 rounded mr-2"></div>
+                        <span class="text-sm">Freight</span>
+                    </div>
+                    <div class="flex items-center">
+                        <div class="w-4 h-2 bg-yellow-500 rounded mr-2"></div>
+                        <span class="text-sm">Suburban</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Side Panel -->
+            <div class="space-y-6">
+                <!-- AI Decisions Panel -->
+                <div class="bg-white rounded-lg shadow-lg p-6">
+                    <h3 class="text-lg font-semibold mb-4 flex items-center">
+                        <i class="fas fa-brain mr-2 text-purple-600"></i>
+                        AI Decisions
+                    </h3>
+                    <div id="decisionsPanel" class="space-y-3 max-h-60 overflow-y-auto">
+                        <div class="text-gray-500 italic text-center py-4">No decisions made yet</div>
+                    </div>
+                </div>
+
+                <!-- Active Conflicts Panel -->
+                <div class="bg-white rounded-lg shadow-lg p-6">
+                    <h3 class="text-lg font-semibold mb-4 flex items-center">
+                        <i class="fas fa-exclamation-triangle mr-2 text-red-600"></i>
+                        Active Conflicts
+                    </h3>
+                    <div id="conflictsPanel" class="space-y-3 max-h-60 overflow-y-auto">
+                        <div class="text-gray-500 italic text-center py-4">No conflicts detected</div>
+                    </div>
+                </div>
+
+                <!-- System Status -->
+                <div class="bg-white rounded-lg shadow-lg p-6">
+                    <h3 class="text-lg font-semibold mb-4 flex items-center">
+                        <i class="fas fa-cogs mr-2 text-gray-600"></i>
+                        System Status
+                    </h3>
+                    <div id="systemStatus" class="space-y-2">
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Status:</span>
+                            <span id="systemStatusText" class="font-medium">Stopped</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Total Trains:</span>
+                            <span id="totalTrains" class="font-medium">5</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">AI Decisions:</span>
+                            <span id="totalDecisions" class="font-medium">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Train Details Modal -->
+        <div id="trainModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+            <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold">Train Details</h3>
+                    <button id="closeModal" class="text-gray-500 hover:text-gray-700">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+                <div id="trainDetails" class="space-y-3">
+                    <!-- Train details will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.4/socket.io.js"></script>
+    <script>
+        class RailwayDashboard {
+            constructor() {
+                this.isRunning = false;
+                this.currentData = null;
+                this.selectedTrain = null;
+                
+                this.initializeEventListeners();
+                this.loadInitialData();
+                
+                // Start periodic updates
+                setInterval(() => this.loadInitialData(), 2000);
+            }
+
+            initializeEventListeners() {
+                // Control buttons
+                document.getElementById('startBtn').addEventListener('click', () => this.startSimulation());
+                document.getElementById('stopBtn').addEventListener('click', () => this.stopSimulation());
+                document.getElementById('resetBtn').addEventListener('click', () => this.resetSimulation());
+                document.getElementById('disruptionBtn').addEventListener('click', () => this.addDisruption());
+                
+                // Modal controls
+                document.getElementById('closeModal').addEventListener('click', () => this.closeTrainModal());
+                document.getElementById('trainModal').addEventListener('click', (e) => {
+                    if (e.target.id === 'trainModal') this.closeTrainModal();
+                });
+            }
+
+            async loadInitialData() {
+                try {
+                    const response = await fetch('/api/status');
+                    const data = await response.json();
+                    
+                    if (data.error) {
+                        console.error('API Error:', data.error);
+                        this.updateConnectionStatus(false);
+                        return;
+                    }
+                    
+                    this.handleSystemUpdate(data);
+                    this.updateConnectionStatus(true);
+                } catch (error) {
+                    console.error('Failed to load data:', error);
+                    this.updateConnectionStatus(false);
+                }
+            }
+
+            updateConnectionStatus(connected) {
+                const statusEl = document.getElementById('connectionStatus');
+                if (connected) {
+                    statusEl.innerHTML = '<i class="fas fa-wifi text-green-500 mr-2"></i>Connected';
+                    statusEl.className = 'flex items-center text-sm text-green-600';
+                } else {
+                    statusEl.innerHTML = '<i class="fas fa-wifi text-red-500 mr-2"></i>Disconnected';
+                    statusEl.className = 'flex items-center text-sm text-red-600';
+                }
+            }
+
+            async startSimulation() {
+                try {
+                    const response = await fetch('/api/start', { method: 'POST' });
+                    const result = await response.json();
+                    
+                    if (response.ok) {
+                        this.isRunning = true;
+                        this.updateControlButtons();
+                        document.getElementById('systemStatusText').textContent = 'Running';
+                        this.showNotification('Simulation started successfully', 'success');
+                    } else {
+                        this.showNotification(result.error || 'Failed to start simulation', 'error');
+                    }
+                } catch (error) {
+                    console.error('Failed to start simulation:', error);
+                    this.showNotification('Failed to start simulation', 'error');
+                }
+            }
+
+            async stopSimulation() {
+                try {
+                    const response = await fetch('/api/stop', { method: 'POST' });
+                    const result = await response.json();
+                    
+                    if (response.ok) {
+                        this.isRunning = false;
+                        this.updateControlButtons();
+                        document.getElementById('systemStatusText').textContent = 'Stopped';
+                        this.showNotification('Simulation stopped', 'info');
+                    } else {
+                        this.showNotification(result.error || 'Failed to stop simulation', 'error');
+                    }
+                } catch (error) {
+                    console.error('Failed to stop simulation:', error);
+                    this.showNotification('Failed to stop simulation', 'error');
+                }
+            }
+
+            async resetSimulation() {
+                await this.stopSimulation();
+                location.reload();
+            }
+
+            async addDisruption() {
+                const disruptions = [
+                    { type: 'signal_failure', location: 'C' },
+                    { type: 'weather', location: 'system-wide' },
+                    { type: 'technical_issue', train_id: 'T001' }
+                ];
+                
+                const disruption = disruptions[Math.floor(Math.random() * disruptions.length)];
+                
+                try {
+                    const response = await fetch('/api/disruption', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(disruption)
+                    });
+                    
+                    if (response.ok) {
+                        this.showNotification(`Added ${disruption.type} disruption`, 'warning');
+                    } else {
+                        const result = await response.json();
+                        this.showNotification(result.error || 'Failed to add disruption', 'error');
+                    }
+                } catch (error) {
+                    console.error('Failed to add disruption:', error);
+                    this.showNotification('Failed to add disruption', 'error');
+                }
+            }
+
+            updateControlButtons() {
+                const startBtn = document.getElementById('startBtn');
+                const stopBtn = document.getElementById('stopBtn');
+                
+                if (this.isRunning) {
+                    startBtn.disabled = true;
+                    startBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                    stopBtn.disabled = false;
+                    stopBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                } else {
+                    startBtn.disabled = false;
+                    startBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                    stopBtn.disabled = true;
+                    stopBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                }
+            }
+
+            handleSystemUpdate(data) {
+                this.currentData = data;
+                this.updateMetrics(data.metrics);
+                this.updateCurrentTime(data.current_time);
+                this.drawNetwork(data.stations, data.trains);
+                this.updateDecisions(data.recent_decisions);
+                this.updateConflicts(data.conflicts);
+                this.updateSystemStatus(data);
+            }
+
+            updateMetrics(metrics) {
+                if (!metrics) return;
+                
+                document.getElementById('onTimeMetric').textContent = `${Math.round(metrics.on_time_performance)}%`;
+                document.getElementById('avgDelayMetric').textContent = `${Math.round(metrics.average_delay)} min`;
+                document.getElementById('throughputMetric').textContent = metrics.throughput;
+                document.getElementById('conflictsMetric').textContent = metrics.active_conflicts;
+            }
+
+            updateCurrentTime(currentTime) {
+                if (!currentTime) return;
+                
+                const hours = Math.floor(currentTime);
+                const minutes = Math.floor((currentTime - hours) * 60);
+                const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+                document.getElementById('currentTime').textContent = timeString;
+            }
+
+            drawNetwork(stations, trains) {
+                if (!stations || !trains) return;
+                
+                const svg = document.getElementById('networkSvg');
+                svg.innerHTML = '';
+                
+                const stationsData = stations;
+                const tracksData = [
+                    { from: 'A', to: 'B', capacity: 2 },
+                    { from: 'B', to: 'C', capacity: 2 },
+                    { from: 'C', to: 'D', capacity: 1 },
+                    { from: 'D', to: 'E', capacity: 2 },
+                    { from: 'C', to: 'F', capacity: 1 },
+                    { from: 'C', to: 'G', capacity: 1 }
+                ];
+                
+                // Draw tracks
+                tracksData.forEach(track => {
+                    const fromStation = stationsData[track.from];
+                    const toStation = stationsData[track.to];
+                    
+                    if (fromStation && toStation) {
+                        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                        line.setAttribute('x1', fromStation.x);
+                        line.setAttribute('y1', fromStation.y);
+                        line.setAttribute('x2', toStation.x);
+                        line.setAttribute('y2', toStation.y);
+                        line.setAttribute('stroke', track.capacity === 1 ? '#ef4444' : '#64748b');
+                        line.setAttribute('stroke-width', track.capacity === 1 ? '3' : '2');
+                        line.setAttribute('stroke-dasharray', track.capacity === 1 ? '5,5' : 'none');
+                        svg.appendChild(line);
+                    }
+                });
+                
+                // Draw stations
+                Object.entries(stationsData).forEach(([id, station]) => {
+                    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    circle.setAttribute('cx', station.x);
+                    circle.setAttribute('cy', station.y);
+                    circle.setAttribute('r', '12');
+                    circle.setAttribute('fill', '#1f2937');
+                    circle.setAttribute('stroke', '#f3f4f6');
+                    circle.setAttribute('stroke-width', '2');
+                    svg.appendChild(circle);
+                    
+                    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    text.setAttribute('x', station.x);
+                    text.setAttribute('y', station.y - 20);
+                    text.setAttribute('text-anchor', 'middle');
+                    text.setAttribute('fill', 'white');
+                    text.setAttribute('font-size', '12');
+                    text.setAttribute('font-weight', 'bold');
+                    text.textContent = station.name;
+                    svg.appendChild(text);
+                });
+                
+                // Draw trains
+                const trainColors = {
+                    'EXPRESS': '#ef4444',
+                    'PASSENGER': '#3b82f6',
+                    'FREIGHT': '#10b981',
+                    'SUBURBAN': '#f59e0b'
+                };
+                
+                let trainIndex = 0;
+                Object.entries(trains).forEach(([trainId, train]) => {
+                    const station = stationsData[train.current_position];
+                    if (!station) return;
+                    
+                    const color = trainColors[train.train_type] || '#6b7280';
+                    const offsetX = (trainIndex % 3) * 6 - 6;
+                    const offsetY = Math.floor(trainIndex / 3) * 8 + 15;
+                    
+                    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    rect.setAttribute('x', station.x - 8 + offsetX);
+                    rect.setAttribute('y', station.y + offsetY);
+                    rect.setAttribute('width', '16');
+                    rect.setAttribute('height', '6');
+                    rect.setAttribute('fill', color);
+                    rect.setAttribute('rx', '2');
+                    rect.classList.add('train-marker', 'cursor-pointer');
+                    rect.addEventListener('click', () => this.showTrainDetails(trainId, train));
+                    svg.appendChild(rect);
+                    
+                    const trainLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    trainLabel.setAttribute('x', station.x + offsetX);
+                    trainLabel.setAttribute('y', station.y + offsetY + 18);
+                    trainLabel.setAttribute('text-anchor', 'middle');
+                    trainLabel.setAttribute('fill', color);
+                    trainLabel.setAttribute('font-size', '10');
+                    trainLabel.setAttribute('font-weight', 'bold');
+                    trainLabel.textContent = trainId;
+                    svg.appendChild(trainLabel);
+                    
+                    trainIndex++;
+                });
+            }
+
+            updateDecisions(decisions) {
+                const panel = document.getElementById('decisionsPanel');
+                
+                if (!decisions || decisions.length === 0) {
+                    panel.innerHTML = '<div class="text-gray-500 italic text-center py-4">No decisions made yet</div>';
+                    return;
+                }
+                
+                panel.innerHTML = decisions.slice(-5).map(decision => `
+                    <div class="decision-card">
+                        <div class="font-medium text-sm mb-1">
+                            ${decision.action.toUpperCase()}: ${decision.target_train}
+                        </div>
+                        <div class="text-xs opacity-90 mb-2">${decision.reason}</div>
+                        <div class="text-xs opacity-75">
+                            Confidence: ${Math.round(decision.confidence * 100)}%
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            updateConflicts(conflicts) {
+                const panel = document.getElementById('conflictsPanel');
+                
+                if (!conflicts || Object.keys(conflicts).length === 0) {
+                    panel.innerHTML = '<div class="text-gray-500 italic text-center py-4">No conflicts detected</div>';
+                    return;
+                }
+                
+                const activeConflicts = Object.values(conflicts);
+                panel.innerHTML = activeConflicts.map(conflict => `
+                    <div class="conflict-alert bg-red-50 border-l-4 border-red-400 p-3 rounded">
+                        <div class="font-medium text-red-800 text-sm">
+                            ${conflict.conflict_type.replace('_', ' ').toUpperCase()}
+                        </div>
+                        <div class="text-sm text-red-600">Location: ${conflict.location}</div>
+                        <div class="text-xs text-red-500">
+                            Trains: ${conflict.trains_involved.join(', ')}
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            updateSystemStatus(data) {
+                document.getElementById('systemStatusText').textContent = data.is_running ? 'Running' : 'Stopped';
+                document.getElementById('totalTrains').textContent = Object.keys(data.trains || {}).length;
+                document.getElementById('totalDecisions').textContent = data.metrics?.total_decisions || 0;
+                
+                this.isRunning = data.is_running;
+                this.updateControlButtons();
+            }
+
+            showTrainDetails(trainId, train) {
+                this.selectedTrain = { id: trainId, ...train };
+                
+                const formatTime = (time) => {
+                    const hours = Math.floor(time);
+                    const minutes = Math.floor((time - hours) * 60);
+                    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+                };
+                
+                const detailsHtml = `
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <span class="text-gray-600 text-sm">Train ID:</span>
+                            <div class="font-medium">${trainId}</div>
+                        </div>
+                        <div>
+                            <span class="text-gray-600 text-sm">Type:</span>
+                            <div class="font-medium">${train.train_type}</div>
+                        </div>
+                        <div>
+                            <span class="text-gray-600 text-sm">Route:</span>
+                            <div class="font-medium">${train.from_station} → ${train.to_station}</div>
+                        </div>
+                        <div>
+                            <span class="text-gray-600 text-sm">Status:</span>
+                            <div class="font-medium capitalize">${train.status}</div>
+                        </div>
+                        <div>
+                            <span class="text-gray-600 text-sm">Scheduled:</span>
+                            <div class="font-medium">${formatTime(train.scheduled_departure)}</div>
+                        </div>
+                        <div>
+                            <span class="text-gray-600 text-sm">Delay:</span>
+                            <div class="font-medium ${train.delay > 0 ? 'text-red-600' : 'text-green-600'}">
+                                ${train.delay > 0 ? `+${Math.round(train.delay * 60)} min` : 'On Time'}
+                            </div>
+                        </div>
+                        <div>
+                            <span class="text-gray-600 text-sm">Current Position:</span>
+                            <div class="font-medium">${train.current_position}</div>
+                        </div>
+                        <div>
+                            <span class="text-gray-600 text-sm">Route:</span>
+                            <div class="font-medium text-xs">${train.route ? train.route.join(' → ') : 'N/A'}</div>
+                        </div>
+                    </div>
+                `;
+                
+                document.getElementById('trainDetails').innerHTML = detailsHtml;
+                document.getElementById('trainModal').classList.remove('hidden');
+                document.getElementById('trainModal').classList.add('flex');
+            }
+
+            closeTrainModal() {
+                document.getElementById('trainModal').classList.add('hidden');
+                document.getElementById('trainModal').classList.remove('flex');
+                this.selectedTrain = null;
+            }
+
+            showNotification(message, type = 'info') {
+                const colors = {
+                    success: 'bg-green-500',
+                    error: 'bg-red-500',
+                    warning: 'bg-yellow-500',
+                    info: 'bg-blue-500'
+                };
+                
+                                const notification = document.createElement('div');
+                notification.className = `fixed top-4 right-4 ${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg z-50 transition-opacity duration-300`;
+                notification.textContent = message;
+                document.body.appendChild(notification);
+
+                // Show notification
+                setTimeout(() => {
+                    notification.style.opacity = '0';
+                }, 3000);
+
+                // Remove from DOM after fade out
+                setTimeout(() => {
+                    document.body.removeChild(notification);
+                }, 3500);
+            }
+        }
+
+        // Initialize the dashboard when the page loads
+        window.addEventListener('DOMContentLoaded', () => {
+            new RailwayDashboard();
+        });
+    </script>
+</body>
+</html>
